@@ -14,6 +14,10 @@ else
   SCRIPTS=$(echo "$CHANGED" | grep '^scripts/' | cut -d'/' -f2 | sort -u || true)
 fi
 
+get_script_id() {
+  grep '"scriptId"' "$1" | sed 's/.*"scriptId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
 SHOW_BASE=false
 PENDING_SCRIPTS=""
 ALL_SCRIPTS=""
@@ -43,12 +47,15 @@ for s in $SCRIPTS; do
       *)
         echo "Creating prod project for $s..."
         mkdir -p "$PROD_DIR"
-        (cd "$PROD_DIR" && clasp create --type standalone --title "[Gmail] $s (prod)")
+        TMPDIR=$(mktemp -d)
+        (cd "$TMPDIR" && clasp create --type standalone --title "[Gmail] $s (prod)")
+        cp "$TMPDIR/.clasp.json" "$PROD_DIR/.clasp.json"
+        rm -rf "$TMPDIR"
         ;;
     esac
   fi
 
-  SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+  SCRIPT_ID=$(get_script_id "$PROD_DIR/.clasp.json")
   ALL_SCRIPTS="$ALL_SCRIPTS $s:$SCRIPT_ID"
 
   SAVED_ID=""
@@ -84,7 +91,7 @@ if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
 
   for s in $PENDING_SCRIPTS; do
     PROD_DIR="scripts/$s/.prod"
-    SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+    SCRIPT_ID=$(get_script_id "$PROD_DIR/.clasp.json")
     SECRET_NAME="CLASP_SCRIPT_ID_$(echo "$s" | tr '-' '_' | tr '[:lower:]' '[:upper:]')"
     echo "  Name:    $SECRET_NAME"
     echo "  Secret:  $SCRIPT_ID"
@@ -105,7 +112,7 @@ if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
       for s in $PENDING_SCRIPTS; do
         PROD_DIR="scripts/$s/.prod"
         STATE_DIR="$STATE_ROOT/$s"
-        SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+        SCRIPT_ID=$(get_script_id "$PROD_DIR/.clasp.json")
         mkdir -p "$STATE_DIR"
         echo "$SCRIPT_ID" > "$STATE_DIR/.secret-added"
       done

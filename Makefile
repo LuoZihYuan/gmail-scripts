@@ -86,7 +86,7 @@ _build:
 	cp scripts/$(s)/.clasp.json scripts/$(s)/build/ 2>/dev/null || true
 
 _ensure-executable:
-	@SCRIPT_ID=$$(grep -o '"scriptId":"[^"]*"' scripts/$(s)/.clasp.json | cut -d'"' -f4); \
+	@SCRIPT_ID=$$(grep '"scriptId"' scripts/$(s)/.clasp.json | sed 's/.*"scriptId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'); \
 	ACCESS_TOKEN=$$(jq -r '.tokens.default.access_token // .token.access_token // empty' ~/.clasprc.json 2>/dev/null); \
 	if [ -z "$$ACCESS_TOKEN" ]; then \
 		echo "Could not read access token from ~/.clasprc.json. Run clasp login first."; \
