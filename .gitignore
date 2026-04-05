@@ -1,5 +1,6 @@
 # Project
 secret.js
+client_secret*.json
 .prod/
 
 # Clasp

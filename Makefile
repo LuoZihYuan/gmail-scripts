@@ -49,15 +49,17 @@ init:
 
 deploy: _ensure-secret _build
 	cd scripts/$(s)/build && clasp push --force
-	cd scripts/$(s)/build && clasp run installTrigger
+	@$(MAKE) _ensure-executable s=$(s)
+	cd scripts/$(s)/build && clasp run-function installTrigger
 
 publish: _ensure-secret _build
 	cd scripts/$(s)/build && clasp push --force
-	cd scripts/$(s)/build && clasp version "$$(git rev-parse HEAD)"
-	cd scripts/$(s)/build && clasp run installTrigger
+	cd scripts/$(s)/build && clasp create-version "$$(git rev-parse HEAD)"
+	@$(MAKE) _ensure-executable s=$(s)
+	cd scripts/$(s)/build && clasp run-function installTrigger
 
 open:
-	cd scripts/$(s) && clasp open
+	cd scripts/$(s) && clasp open-script
 
 _ensure-secret:
 	@if [ -f $(SECRET_EXAMPLE) ]; then \
@@ -76,8 +78,33 @@ _build:
 	rm -rf scripts/$(s)/build
 	mkdir -p scripts/$(s)/build
 	cp shared/*.js scripts/$(s)/build/
-	cp scripts/$(s)/*.js scripts/$(s)/build/ 2>/dev/null || true
-	cp scripts/$(s)/*.json scripts/$(s)/build/ 2>/dev/null || true
+	for f in scripts/$(s)/*.js; do \
+		case "$$f" in *secret.example.js) continue;; esac; \
+		cp "$$f" scripts/$(s)/build/; \
+	done
+	cp scripts/$(s)/appsscript.json scripts/$(s)/build/ 2>/dev/null || true
+	cp scripts/$(s)/.clasp.json scripts/$(s)/build/ 2>/dev/null || true
+
+_ensure-executable:
+	@SCRIPT_ID=$$(grep -o '"scriptId":"[^"]*"' scripts/$(s)/.clasp.json | cut -d'"' -f4); \
+	ACCESS_TOKEN=$$(jq -r '.tokens.default.access_token // .token.access_token // empty' ~/.clasprc.json 2>/dev/null); \
+	if [ -z "$$ACCESS_TOKEN" ]; then \
+		echo "Could not read access token from ~/.clasprc.json. Run clasp login first."; \
+		exit 1; \
+	fi; \
+	DEPLOYMENTS=$$(curl -s \
+		"https://script.googleapis.com/v1/projects/$$SCRIPT_ID/deployments" \
+		-H "Authorization: Bearer $$ACCESS_TOKEN"); \
+	HAS_EXEC=$$(echo "$$DEPLOYMENTS" | grep -c "EXECUTION_API" || true); \
+	if [ "$$HAS_EXEC" = "0" ]; then \
+		echo "Creating API Executable deployment..."; \
+		curl -s -X POST \
+			"https://script.googleapis.com/v1/projects/$$SCRIPT_ID/deployments" \
+			-H "Authorization: Bearer $$ACCESS_TOKEN" \
+			-H "Content-Type: application/json" \
+			-d '{"deploymentConfig":{"description":"API Executable"}}' \
+		> /dev/null; \
+	fi
 
 _install-hook:
 	@if [ ! -f .git/hooks/pre-push ]; then \
@@ -87,13 +114,12 @@ _install-hook:
 	fi
 
 _update-workflow:
-	@SCRIPTS=$$(ls -d scripts/*/ 2>/dev/null | xargs -I{} basename {} | sed 's/^/          - /' ); \
+	@SCRIPTS=$$(ls -d scripts/*/ 2>/dev/null | xargs -I{} basename {} | sed 's/^/          - /'); \
 	sed -i.bak '/# SCRIPT_OPTIONS_START/,/# SCRIPT_OPTIONS_END/{/# SCRIPT_OPTIONS_START/!{/# SCRIPT_OPTIONS_END/!d;}}' $(WORKFLOW); \
-	sed -i.bak "/# SCRIPT_OPTIONS_START/a\\
-          - all\\
-$$SCRIPTS" $(WORKFLOW); \
-	rm -f $(WORKFLOW).bak; \
+	{ echo "          - all"; echo "$$SCRIPTS"; } > /tmp/_workflow_scripts.tmp; \
+	sed -i.bak "/# SCRIPT_OPTIONS_START/r /tmp/_workflow_scripts.tmp" $(WORKFLOW); \
+	rm -f $(WORKFLOW).bak /tmp/_workflow_scripts.tmp; \
 	echo "Updated workflow dropdown"
 
-.PHONY: help new init deploy publish open _ensure-secret _build _install-hook _update-workflow
+.PHONY: help new init deploy publish open _ensure-secret _build _ensure-executable _install-hook _update-workflow
 .DEFAULT_GOAL := help

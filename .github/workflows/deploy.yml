@@ -60,6 +60,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - run: pnpm add -g @google/clasp
+
       - name: Check secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -78,16 +88,6 @@ jobs:
             echo "Add them at: ${{ github.server_url }}/${{ github.repository }}/settings/secrets/actions/new"
             exit 1
           fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
-      - run: pnpm add -g @google/clasp
 
       - name: Write secrets
         env:
@@ -108,21 +108,3 @@ jobs:
 
       - name: Publish
         run: make publish s=${{ matrix.script }}
-
-      - name: Create API Executable deployment
-        env:
-          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
-        run: |
-          ACCESS_TOKEN=$(jq -r '.access_token // empty' ~/.clasprc.json || true)
-          if [ -z "$ACCESS_TOKEN" ]; then
-            ACCESS_TOKEN=$(jq -r '.token.access_token' ~/.clasprc.json)
-          fi
-
-          VERSION=$(clasp versions 2>/dev/null | tail -1 | grep -oP '^\d+')
-
-          curl -s -X POST \
-            "https://script.googleapis.com/v1/projects/${CLASP_SCRIPT_ID}/deployments" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"versionNumber\": ${VERSION}, \"description\": \"${{ github.sha }}\"}" \
-          || echo "Deployment already exists, skipping"
