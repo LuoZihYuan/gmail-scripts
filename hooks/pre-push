@@ -34,7 +34,8 @@ for s in $SCRIPTS; do
   if [ ! -f "$PROD_DIR/.clasp.json" ]; then
     echo ""
     read -p "Use the same Apps Script project for prod for $s? (y/n) " answer
-    case "${answer,,}" in
+    answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+    case "$answer" in
       y|yes)
         mkdir -p "$PROD_DIR"
         cp "$SCRIPT_DIR/.clasp.json" "$PROD_DIR/.clasp.json"
@@ -48,7 +49,6 @@ for s in $SCRIPTS; do
   fi
 
   SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
-  SECRET_NAME="CLASP_SCRIPT_ID_$(echo "$s" | tr '-' '_' | tr '[:lower:]' '[:upper:]')"
   ALL_SCRIPTS="$ALL_SCRIPTS $s:$SCRIPT_ID"
 
   SAVED_ID=""
@@ -95,7 +95,8 @@ if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
   echo ""
 
   read -p "Have you added all the secrets? (y/n) " answer
-  case "${answer,,}" in
+  answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+  case "$answer" in
     y|yes)
       if [ "$SHOW_BASE" = true ]; then
         mkdir -p "$STATE_ROOT"
