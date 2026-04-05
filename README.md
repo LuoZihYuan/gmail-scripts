@@ -12,16 +12,9 @@ Automate Gmail workflows with Google Apps Script and Gemini.
 
 ### **Tab Completion (optional)**
 
-Enable autocomplete for `make` commands and script names.
+Add to `~/.bashrc` or `~/.zshrc`:
 
-**Bash** — add to `~/.bashrc`:
 ```
-source /path/to/gmail-scripts/completions.sh
-```
-
-**Zsh** — add to `~/.zshrc`:
-```
-autoload -U bashcompinit && bashcompinit
 source /path/to/gmail-scripts/completions.sh
 ```
 
