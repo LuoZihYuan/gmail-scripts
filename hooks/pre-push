@@ -11,7 +11,7 @@ SCRIPTS=""
 if echo "$CHANGED" | grep -q '^shared/'; then
   SCRIPTS=$(ls -d scripts/*/ 2>/dev/null | xargs -I{} basename {})
 else
-  SCRIPTS=$(echo "$CHANGED" | grep '^scripts/' | cut -d'/' -f2 | sort -u)
+  SCRIPTS=$(echo "$CHANGED" | grep '^scripts/' | cut -d'/' -f2 | sort -u || true)
 fi
 
 SHOW_BASE=false
@@ -33,7 +33,7 @@ for s in $SCRIPTS; do
 
   if [ ! -f "$PROD_DIR/.clasp.json" ]; then
     echo ""
-    read -p "Use the same Apps Script project for prod for $s? (y/n) " answer
+    read -p "Use the same Apps Script project for prod for $s? (y/n) " answer < /dev/tty
     answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
     case "$answer" in
       y|yes)
@@ -94,7 +94,7 @@ if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 
-  read -p "Have you added all the secrets? (y/n) " answer
+  read -p "Have you added all the secrets? (y/n) " answer < /dev/tty
   answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
   case "$answer" in
     y|yes)
