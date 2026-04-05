@@ -7,7 +7,8 @@ Automate Gmail workflows with Google Apps Script and Gemini.
 - [Node.js](https://nodejs.org/) (v20+)
 - [pnpm](https://pnpm.io/)
 - [clasp](https://github.com/google/clasp): `pnpm add -g @google/clasp`
-- `clasp login`
+- A [GCP project](https://console.cloud.google.com/) with a Desktop OAuth client
+- `clasp login --creds <client_secret.json> --extra-scopes https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/gmail.labels,https://www.googleapis.com/auth/script.external_request,https://www.googleapis.com/auth/script.scriptapp`
 
 ### **Tab Completion (optional)**
 
@@ -38,6 +39,14 @@ make deploy s=rejection-sorter
 ```
 make new s=newsletter-sorter
 make deploy s=newsletter-sorter
+```
+
+After creating a new script, add the following to its `appsscript.json` for remote execution:
+
+```json
+"executionApi": {
+  "access": "ANYONE"
+}
 ```
 
 ## **Publishing**
