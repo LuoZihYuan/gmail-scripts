@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_ROOT=".git/_gmail-scripts"
+REPO_URL=$(git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|')
+SECRETS_URL="$REPO_URL/settings/secrets/actions/new"
+
+CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+SCRIPTS=""
+
+if echo "$CHANGED" | grep -q '^shared/'; then
+  SCRIPTS=$(ls -d scripts/*/ 2>/dev/null | xargs -I{} basename {})
+else
+  SCRIPTS=$(echo "$CHANGED" | grep '^scripts/' | cut -d'/' -f2 | sort -u)
+fi
+
+SHOW_BASE=false
+PENDING_SCRIPTS=""
+ALL_SCRIPTS=""
+
+if [ ! -f "$STATE_ROOT/.base-secrets-added" ]; then
+  SHOW_BASE=true
+fi
+
+for s in $SCRIPTS; do
+  SCRIPT_DIR="scripts/$s"
+  PROD_DIR="$SCRIPT_DIR/.prod"
+  STATE_DIR="$STATE_ROOT/$s"
+
+  if [ ! -f "$SCRIPT_DIR/.clasp.json" ]; then
+    continue
+  fi
+
+  if [ ! -f "$PROD_DIR/.clasp.json" ]; then
+    echo ""
+    read -p "Use the same Apps Script project for prod for $s? (y/n) " answer
+    case "${answer,,}" in
+      y|yes)
+        mkdir -p "$PROD_DIR"
+        cp "$SCRIPT_DIR/.clasp.json" "$PROD_DIR/.clasp.json"
+        ;;
+      *)
+        echo "Creating prod project for $s..."
+        mkdir -p "$PROD_DIR"
+        (cd "$PROD_DIR" && clasp create --type standalone --title "[Gmail] $s (prod)")
+        ;;
+    esac
+  fi
+
+  SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+  ALL_SCRIPTS="$ALL_SCRIPTS $s:$SCRIPT_ID"
+
+  SAVED_ID=""
+  if [ -f "$STATE_DIR/.secret-added" ]; then
+    SAVED_ID=$(cat "$STATE_DIR/.secret-added")
+  fi
+
+  if [ "$SCRIPT_ID" != "$SAVED_ID" ]; then
+    PENDING_SCRIPTS="$PENDING_SCRIPTS $s"
+  fi
+done
+
+if [ -z "$ALL_SCRIPTS" ]; then
+  exit 0
+fi
+
+if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
+  echo ""
+  echo "Add the following GitHub Secrets at:"
+  echo "$SECRETS_URL"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  if [ "$SHOW_BASE" = true ]; then
+    echo "  Name:    GEMINI_API_KEY"
+    echo "  Secret:  Your Gemini API key"
+    echo ""
+    echo "  Name:    CLASP_TOKEN"
+    echo "  Secret:  $(cat ~/.clasprc.json 2>/dev/null || echo 'File not found — run clasp login first')"
+    echo ""
+  fi
+
+  for s in $PENDING_SCRIPTS; do
+    PROD_DIR="scripts/$s/.prod"
+    SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+    echo "  Name:    CLASP_SCRIPT_ID_$s"
+    echo "  Secret:  $SCRIPT_ID"
+    echo ""
+  done
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+
+  read -p "Have you added all the secrets? (y/n) " answer
+  case "${answer,,}" in
+    y|yes)
+      if [ "$SHOW_BASE" = true ]; then
+        mkdir -p "$STATE_ROOT"
+        touch "$STATE_ROOT/.base-secrets-added"
+      fi
+      for s in $PENDING_SCRIPTS; do
+        PROD_DIR="scripts/$s/.prod"
+        STATE_DIR="$STATE_ROOT/$s"
+        SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+        mkdir -p "$STATE_DIR"
+        echo "$SCRIPT_ID" > "$STATE_DIR/.secret-added"
+      done
+      ;;
+    *)
+      echo "Push aborted. Add the secrets and try again."
+      exit 1
+      ;;
+  esac
+fi
+
+echo ""
+echo "CI will publish to prod:"
+for entry in $ALL_SCRIPTS; do
+  s="${entry%%:*}"
+  id="${entry##*:}"
+  echo "  $s → $id"
+done
+echo ""

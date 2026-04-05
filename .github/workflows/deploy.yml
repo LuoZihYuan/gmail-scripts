@@ -1,0 +1,128 @@
+name: Deploy to Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "shared/**"
+      - "scripts/**"
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Script to deploy"
+        required: true
+        type: choice
+        options:
+          # SCRIPT_OPTIONS_START
+          - all
+          - rejection-sorter
+          # SCRIPT_OPTIONS_END
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      scripts: ${{ steps.diff.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT="${{ github.event.inputs.script }}"
+            if [ "$INPUT" = "all" ]; then
+              SCRIPTS=$(ls -d scripts/*/ | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            else
+              SCRIPTS=$(echo "[\"$INPUT\"]")
+            fi
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+
+            if echo "$CHANGED" | grep -q '^shared/'; then
+              SCRIPTS=$(ls -d scripts/*/ | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            else
+              SCRIPTS=$(echo "$CHANGED" | grep '^scripts/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            fi
+          fi
+
+          echo "scripts=$SCRIPTS" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: detect
+    if: needs.detect.outputs.scripts != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        script: ${{ fromJson(needs.detect.outputs.scripts) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLASP_TOKEN: ${{ secrets.CLASP_TOKEN }}
+          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          MISSING=""
+          if [ -z "$GEMINI_API_KEY" ]; then MISSING="$MISSING\n  - GEMINI_API_KEY"; fi
+          if [ -z "$CLASP_TOKEN" ]; then MISSING="$MISSING\n  - CLASP_TOKEN"; fi
+          if [ -z "$CLASP_SCRIPT_ID" ]; then MISSING="$MISSING\n  - CLASP_SCRIPT_ID_$SCRIPT"; fi
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing GitHub Secrets:$(echo -e "$MISSING")"
+            echo ""
+            echo "Add them at: ${{ github.server_url }}/${{ github.repository }}/settings/secrets/actions/new"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - run: pnpm add -g @google/clasp
+
+      - name: Write secrets
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
+          CLASP_TOKEN: ${{ secrets.CLASP_TOKEN }}
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          echo "const SECRET = { GEMINI_API_KEY: \"${GEMINI_API_KEY}\" };" > "scripts/${SCRIPT}/secret.js"
+          echo "{\"scriptId\":\"${CLASP_SCRIPT_ID}\",\"rootDir\":\".\"}" > "scripts/${SCRIPT}/.clasp.json"
+          echo "${CLASP_TOKEN}" > ~/.clasprc.json
+
+      - name: Set prod environment
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: |
+          sed -i 's/ENV: "dev"/ENV: "prod"/' "scripts/${SCRIPT}/config.js"
+
+      - name: Publish
+        run: make publish s=${{ matrix.script }}
+
+      - name: Create API Executable deployment
+        env:
+          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
+        run: |
+          ACCESS_TOKEN=$(jq -r '.access_token // empty' ~/.clasprc.json || true)
+          if [ -z "$ACCESS_TOKEN" ]; then
+            ACCESS_TOKEN=$(jq -r '.token.access_token' ~/.clasprc.json)
+          fi
+
+          VERSION=$(clasp versions 2>/dev/null | tail -1 | grep -oP '^\d+')
+
+          curl -s -X POST \
+            "https://script.googleapis.com/v1/projects/${CLASP_SCRIPT_ID}/deployments" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"versionNumber\": ${VERSION}, \"description\": \"${{ github.sha }}\"}" \
+          || echo "Deployment already exists, skipping"
