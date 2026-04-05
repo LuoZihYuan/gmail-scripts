@@ -5,6 +5,7 @@ SECRET_FILE = scripts/$(s)/secret.js
 SECRET_EXAMPLE = scripts/$(s)/secret.example.js
 PLACEHOLDER = YOUR_GEMINI_API_KEY_HERE
 WORKFLOW = .github/workflows/deploy.yml
+APPSSCRIPT = scripts/$(s)/appsscript.json
 
 help:
 	@echo "Usage: make <command> s=<script-name> [t=<title>]"
@@ -44,7 +45,9 @@ init:
 		echo "scripts/$(s) is already linked to an Apps Script project."; \
 		exit 1; \
 	fi
+	@if [ -f $(APPSSCRIPT) ]; then cp $(APPSSCRIPT) $(APPSSCRIPT).bak; fi
 	cd scripts/$(s) && clasp create --type standalone --title "$(t)"
+	@if [ -f $(APPSSCRIPT).bak ]; then mv $(APPSSCRIPT).bak $(APPSSCRIPT); fi
 	@$(MAKE) _install-hook
 	@$(MAKE) _link-gcp s=$(s)
 	@echo "Initialized scripts/$(s)"
