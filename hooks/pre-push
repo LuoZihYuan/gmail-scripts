@@ -55,10 +55,13 @@ for s in $SCRIPTS; do
         cp "$SCRIPT_DIR/.clasp.json" "$PROD_DIR/.clasp.json"
         ;;
       *)
-        echo "Creating prod project for $s..."
+        DEFAULT_TITLE="[Gmail] $s (prod)"
+        read -p "Project title [$DEFAULT_TITLE]: " title < /dev/tty
+        title=${title:-$DEFAULT_TITLE}
+        echo "Creating prod project: $title"
         mkdir -p "$PROD_DIR"
         TMPDIR=$(mktemp -d)
-        (cd "$TMPDIR" && clasp create --type standalone --title "[Gmail] $s (prod)")
+        (cd "$TMPDIR" && clasp create --type standalone --title "$title")
         cp "$TMPDIR/.clasp.json" "$PROD_DIR/.clasp.json"
         rm -rf "$TMPDIR"
 
