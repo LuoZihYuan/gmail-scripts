@@ -70,17 +70,21 @@ jobs:
 
       - run: pnpm add -g @google/clasp
 
+      - name: Resolve secret name
+        id: secret_name
+        run: echo "name=CLASP_SCRIPT_ID_$(echo '${{ matrix.script }}' | tr '-' '_' | tr '[:lower:]' '[:upper:]')" >> "$GITHUB_OUTPUT"
+
       - name: Check secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CLASP_TOKEN: ${{ secrets.CLASP_TOKEN }}
-          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
-          SCRIPT: ${{ matrix.script }}
+          CLASP_SCRIPT_ID: ${{ secrets[steps.secret_name.outputs.name] }}
+          SECRET_NAME: ${{ steps.secret_name.outputs.name }}
         run: |
           MISSING=""
           if [ -z "$GEMINI_API_KEY" ]; then MISSING="$MISSING\n  - GEMINI_API_KEY"; fi
           if [ -z "$CLASP_TOKEN" ]; then MISSING="$MISSING\n  - CLASP_TOKEN"; fi
-          if [ -z "$CLASP_SCRIPT_ID" ]; then MISSING="$MISSING\n  - CLASP_SCRIPT_ID_$SCRIPT"; fi
+          if [ -z "$CLASP_SCRIPT_ID" ]; then MISSING="$MISSING\n  - $SECRET_NAME"; fi
 
           if [ -n "$MISSING" ]; then
             echo "::error::Missing GitHub Secrets:$(echo -e "$MISSING")"
@@ -92,7 +96,7 @@ jobs:
       - name: Write secrets
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          CLASP_SCRIPT_ID: ${{ secrets[format('CLASP_SCRIPT_ID_{0}', matrix.script)] }}
+          CLASP_SCRIPT_ID: ${{ secrets[steps.secret_name.outputs.name] }}
           CLASP_TOKEN: ${{ secrets.CLASP_TOKEN }}
           SCRIPT: ${{ matrix.script }}
         run: |

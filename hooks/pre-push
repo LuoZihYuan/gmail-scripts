@@ -48,6 +48,7 @@ for s in $SCRIPTS; do
   fi
 
   SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
+  SECRET_NAME="CLASP_SCRIPT_ID_$(echo "$s" | tr '-' '_' | tr '[:lower:]' '[:upper:]')"
   ALL_SCRIPTS="$ALL_SCRIPTS $s:$SCRIPT_ID"
 
   SAVED_ID=""
@@ -84,7 +85,8 @@ if [ "$SHOW_BASE" = true ] || [ -n "$PENDING_SCRIPTS" ]; then
   for s in $PENDING_SCRIPTS; do
     PROD_DIR="scripts/$s/.prod"
     SCRIPT_ID=$(grep -o '"scriptId":"[^"]*"' "$PROD_DIR/.clasp.json" | cut -d'"' -f4)
-    echo "  Name:    CLASP_SCRIPT_ID_$s"
+    SECRET_NAME="CLASP_SCRIPT_ID_$(echo "$s" | tr '-' '_' | tr '[:lower:]' '[:upper:]')"
+    echo "  Name:    $SECRET_NAME"
     echo "  Secret:  $SCRIPT_ID"
     echo ""
   done
