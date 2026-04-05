@@ -32,6 +32,7 @@ new:
 	cd scripts/$(s) && clasp create --type standalone --title "$(t)"
 	@$(MAKE) _install-hook
 	@$(MAKE) _update-workflow
+	@$(MAKE) _link-gcp s=$(s)
 	@echo "Created scripts/$(s)"
 
 init:
@@ -45,6 +46,7 @@ init:
 	fi
 	cd scripts/$(s) && clasp create --type standalone --title "$(t)"
 	@$(MAKE) _install-hook
+	@$(MAKE) _link-gcp s=$(s)
 	@echo "Initialized scripts/$(s)"
 
 deploy: _ensure-secret _build
@@ -106,6 +108,27 @@ _ensure-executable:
 		> /dev/null; \
 	fi
 
+_link-gcp:
+	@SCRIPT_ID=$$(grep '"scriptId"' scripts/$(s)/.clasp.json | sed 's/.*"scriptId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'); \
+	URL="https://script.google.com/home/projects/$$SCRIPT_ID/settings"; \
+	echo ""; \
+	echo "Link your GCP project to this Apps Script project:"; \
+	echo "  1. Click 'Change project' in the page opening in your browser"; \
+	echo "  2. Enter your GCP project number"; \
+	echo ""; \
+	if command -v open >/dev/null 2>&1; then \
+		open "$$URL"; \
+	elif command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open "$$URL"; \
+	else \
+		echo "  Open: $$URL"; \
+	fi; \
+	read -p "Done? (y/n) " answer; \
+	answer=$$(echo "$$answer" | tr '[:upper:]' '[:lower:]'); \
+	if [ "$$answer" != "y" ] && [ "$$answer" != "yes" ]; then \
+		echo "You can link the GCP project later via: make open s=$(s)"; \
+	fi
+
 _install-hook:
 	@if [ ! -f .git/hooks/pre-push ]; then \
 		cp hooks/pre-push .git/hooks/pre-push; \
@@ -121,5 +144,5 @@ _update-workflow:
 	rm -f $(WORKFLOW).bak /tmp/_workflow_scripts.tmp; \
 	echo "Updated workflow dropdown"
 
-.PHONY: help new init deploy publish open _ensure-secret _build _ensure-executable _install-hook _update-workflow
+.PHONY: help new init deploy publish open _ensure-secret _build _ensure-executable _link-gcp _install-hook _update-workflow
 .DEFAULT_GOAL := help

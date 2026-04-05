@@ -18,6 +18,16 @@ get_script_id() {
   grep '"scriptId"' "$1" | sed 's/.*"scriptId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
 }
 
+open_url() {
+  if command -v open >/dev/null 2>&1; then
+    open "$1"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$1"
+  else
+    echo "  Open: $1"
+  fi
+}
+
 SHOW_BASE=false
 PENDING_SCRIPTS=""
 ALL_SCRIPTS=""
@@ -51,6 +61,15 @@ for s in $SCRIPTS; do
         (cd "$TMPDIR" && clasp create --type standalone --title "[Gmail] $s (prod)")
         cp "$TMPDIR/.clasp.json" "$PROD_DIR/.clasp.json"
         rm -rf "$TMPDIR"
+
+        SCRIPT_ID=$(get_script_id "$PROD_DIR/.clasp.json")
+        echo ""
+        echo "Link your GCP project to the prod Apps Script project:"
+        echo "  1. Click 'Change project' in the page opening in your browser"
+        echo "  2. Enter your GCP project number"
+        echo ""
+        open_url "https://script.google.com/home/projects/$SCRIPT_ID/settings"
+        read -p "Done? (y/n) " answer < /dev/tty
         ;;
     esac
   fi
