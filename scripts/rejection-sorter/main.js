@@ -4,8 +4,17 @@ function log_(msg) {
   Logger.log.apply(Logger, args);
 }
 
+function getDomain_(from) {
+  var match = from.match(/@([^>]+)/);
+  if (!match) return from;
+  var parts = match[1].split('.');
+  parts.pop();
+  return parts.join('.') || from;
+}
+
 function processNewEmails() {
   const threads = getRecentInboxThreads_();
+  log_("Checking %s threads", threads.length);
 
   for (const thread of threads) {
     try {
@@ -13,20 +22,24 @@ function processNewEmails() {
       const body = sanitize_(message.getPlainBody().substring(0, CONFIG.MAX_EMAIL_CHARS));
       const subject = sanitize_(message.getSubject());
       const from = message.getFrom();
+      const domain = getDomain_(from);
       const date = message.getDate();
       const yearPrefix = "'" + Utilities.formatDate(date, Session.getScriptTimeZone(), "yy");
 
       const isRejection = resolveClassification_(subject, from, body);
-      if (isRejection !== "rejection") continue;
+      if (isRejection !== "rejection") {
+        log_("Skipped — %s — %s", domain, subject);
+        continue;
+      }
 
       const roleCategory = resolveRole_(subject, from, body);
       const targetLabel = resolveLabel_(yearPrefix, roleCategory);
       targetLabel.addToThread(thread);
       thread.moveToArchive();
 
-      log_("Filed: %s | Role: %s | Label: %s", subject, roleCategory || "unknown", targetLabel.getName());
+      log_("Filed → %s — %s — %s", roleCategory || "unknown", domain, subject);
     } catch (err) {
-      log_("Error: %s — %s", thread.getFirstMessageSubject(), err.message);
+      log_("Error — %s — %s", thread.getFirstMessageSubject(), err.message);
     }
   }
 }
@@ -88,7 +101,7 @@ JSON schema:
 }`);
 
   if (!result) return "uncertain";
-  log_("Classification tiebreaker: %s | %s", result.classification, result.reasoning);
+  log_("Tiebreaker (classification): %s", result.classification);
   return result.classification;
 }
 
@@ -155,7 +168,7 @@ JSON schema:
 }`);
 
   if (!result) return null;
-  log_("Role tiebreaker: %s | %s", result.roleCategory, result.reasoning);
+  log_("Tiebreaker (role): %s", result.roleCategory);
   return normalizeRole_(result.roleCategory);
 }
 
